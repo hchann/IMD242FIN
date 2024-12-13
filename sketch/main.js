@@ -1,66 +1,102 @@
 // 종횡비를 고정하고 싶을 경우: 아래 두 변수를 0이 아닌 원하는 종, 횡 비율값으로 설정.
 // 종횡비를 고정하고 싶지 않을 경우: 아래 두 변수 중 어느 하나라도 0으로 설정.
 const aspectW = 4;
-const aspectH = 3;
+const aspectH = 0;
 // html에서 클래스명이 container-canvas인 첫 엘리먼트: 컨테이너 가져오기.
 const container = document.body.querySelector('.container-canvas');
-// 필요에 따라 이하에 변수 생성.
+
+let video; // 비디오 캡처
+let handpose; // Handpose 모델
+let predictions = []; // 예측 결과 저장
 
 function setup() {
   // 컨테이너의 현재 위치, 크기 등의 정보 가져와서 객체구조분해할당을 통해 너비, 높이 정보를 변수로 추출.
   const { width: containerW, height: containerH } =
     container.getBoundingClientRect();
-  // 종횡비가 설정되지 않은 경우:
-  // 컨테이너의 크기와 일치하도록 캔버스를 생성하고, 컨테이너의 자녀로 설정.
+
+  // 캔버스 설정
   if (aspectW === 0 || aspectH === 0) {
     createCanvas(containerW, containerH).parent(container);
-  }
-  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 클 경우:
-  // 컨테이너의 세로길이에 맞춰 종횡비대로 캔버스를 생성하고, 컨테이너의 자녀로 설정.
-  else if (containerW / containerH > aspectW / aspectH) {
+  } else if (containerW / containerH > aspectW / aspectH) {
     createCanvas((containerH * aspectW) / aspectH, containerH).parent(
       container
     );
-  }
-  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 작거나 같을 경우:
-  // 컨테이너의 가로길이에 맞춰 종횡비대로 캔버스를 생성하고, 컨테이너의 자녀로 설정.
-  else {
+  } else {
     createCanvas(containerW, (containerW * aspectH) / aspectW).parent(
       container
     );
   }
+
   init();
-  // createCanvas를 제외한 나머지 구문을 여기 혹은 init()에 작성.
+
+  // 비디오 설정
+  video = createCapture(VIDEO);
+  video.size(width, height);
+  video.hide();
+
+  // Handpose 모델 초기화
+  handpose = ml5.handpose(video, modelReady);
+
+  // 예측 결과 처리
+  handpose.on('predict', (results) => {
+    predictions = results;
+  });
 }
 
-// windowResized()에서 setup()에 준하는 구문을 실행해야할 경우를 대비해 init이라는 명칭의 함수를 만들어 둠.
+// 모델 로드 완료 시 호출되는 콜백 함수
+function modelReady() {
+  console.log('Handpose 모델이 로드되었습니다!');
+}
+
 function init() {}
 
 function draw() {
-  background('white');
-  circle(mouseX, mouseY, 50);
+  background(255);
+
+  // 비디오 픽셀 데이터 로드
+  video.loadPixels();
+
+  // 모자이크 효과 적용
+  let gridSize = int(map(mouseX, 0, width, 5, 20)); // 마우스 위치에 따라 그리드 크기 변경
+  for (let x = 0; x < video.width; x += gridSize) {
+    for (let y = 0; y < video.height; y += gridSize) {
+      let index = (y * video.width + x) * 4;
+      let r = video.pixels[index];
+      let g = video.pixels[index + 1];
+      let b = video.pixels[index + 2];
+
+      fill(r, g, b);
+      noStroke();
+      rect(x, y, gridSize, gridSize);
+    }
+  }
+
+  // Handpose 키포인트 그리기
+  drawKeypoints();
+}
+
+// 예측된 키포인트를 그리는 함수
+function drawKeypoints() {
+  for (let i = 0; i < predictions.length; i++) {
+    let prediction = predictions[i];
+    for (let j = 0; j < prediction.landmarks.length; j++) {
+      let [x, y, z] = prediction.landmarks[j];
+      fill(0, 255, 0);
+      noStroke();
+      ellipse(x, y, 10, 10);
+    }
+  }
 }
 
 function windowResized() {
-  // 컨테이너의 현재 위치, 크기 등의 정보 가져와서 객체구조분해할당을 통해 너비, 높이 정보를 변수로 추출.
   const { width: containerW, height: containerH } =
     container.getBoundingClientRect();
-  // 종횡비가 설정되지 않은 경우:
-  // 컨테이너의 크기와 일치하도록 캔버스 크기를 조정.
+
   if (aspectW === 0 || aspectH === 0) {
     resizeCanvas(containerW, containerH);
-  }
-  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 클 경우:
-  // 컨테이너의 세로길이에 맞춰 종횡비대로 캔버스 크기를 조정.
-  else if (containerW / containerH > aspectW / aspectH) {
+  } else if (containerW / containerH > aspectW / aspectH) {
     resizeCanvas((containerH * aspectW) / aspectH, containerH);
-  }
-  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 작거나 같을 경우:
-  // 컨테이너의 가로길이에 맞춰 종횡비대로 캔버스 크기를 조정.
-  else {
+  } else {
     resizeCanvas(containerW, (containerW * aspectH) / aspectW);
   }
-  // 위 과정을 통해 캔버스 크기가 조정된 경우, 다시 처음부터 그려야할 수도 있다.
-  // 이런 경우 setup()의 일부 구문을 init()에 작성해서 여기서 실행하는게 편리하다.
-  // init();
 }
