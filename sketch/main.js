@@ -10,11 +10,11 @@ let handpose;
 let predictions = [];
 
 const images = [
-  'asset/image.jpg',
-  'asset/image1.jpg',
-  'asset/image2.jpg',
-  'asset/image3.jpg',
-  'asset/image4.jpg',
+  'images/image.jpg',
+  'images/image1.jpg',
+  'images/image2.jpg',
+  'images/image3.jpg',
+  'images/image4.jpg',
 ];
 
 let currentImageIdx = 0; //현재 표시 중인 이미지 인덱스
