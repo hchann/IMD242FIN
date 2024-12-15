@@ -4,99 +4,139 @@ const aspectW = 4;
 const aspectH = 0;
 // html에서 클래스명이 container-canvas인 첫 엘리먼트: 컨테이너 가져오기.
 const container = document.body.querySelector('.container-canvas');
+// 필요에 따라 이하에 변수 생성.
+let img;
+let handpose;
+let predictions = [];
 
-let video; // 비디오 캡처
-let handpose; // Handpose 모델
-let predictions = []; // 예측 결과 저장
+const images = [
+  'asset/image.jpg',
+  'asset/image1.jpg',
+  'asset/image2.jpg',
+  'asset/image3.jpg',
+  'asset/image4.jpg',
+];
+
+let currentImageIdx = 0; //현재 표시 중인 이미지 인덱스
+
+function preload() {
+  img = loadImage(images[currentImageIdx]);
+}
 
 function setup() {
   // 컨테이너의 현재 위치, 크기 등의 정보 가져와서 객체구조분해할당을 통해 너비, 높이 정보를 변수로 추출.
   const { width: containerW, height: containerH } =
     container.getBoundingClientRect();
-
-  // 캔버스 설정
+  // 종횡비가 설정되지 않은 경우:
+  // 컨테이너의 크기와 일치하도록 캔버스를 생성하고, 컨테이너의 자녀로 설정.
   if (aspectW === 0 || aspectH === 0) {
     createCanvas(containerW, containerH).parent(container);
-  } else if (containerW / containerH > aspectW / aspectH) {
+  }
+  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 클 경우:
+  // 컨테이너의 세로길이에 맞춰 종횡비대로 캔버스를 생성하고, 컨테이너의 자녀로 설정.
+  else if (containerW / containerH > aspectW / aspectH) {
     createCanvas((containerH * aspectW) / aspectH, containerH).parent(
       container
     );
-  } else {
+  }
+  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 작거나 같을 경우:
+  // 컨테이너의 가로길이에 맞춰 종횡비대로 캔버스를 생성하고, 컨테이너의 자녀로 설정.
+  else {
     createCanvas(containerW, (containerW * aspectH) / aspectW).parent(
       container
     );
   }
 
-  init();
+  handpose = ml5.handpose(createCapture(VIDEO).hide(), modelReday); //ml5에서 handpose 가져오기.
 
-  // 비디오 설정
-  video = createCapture(VIDEO);
-  video.size(width, height);
-  video.hide();
-
-  // Handpose 모델 초기화
-  handpose = ml5.handpose(video, modelReady);
-
-  // 예측 결과 처리
   handpose.on('predict', (results) => {
     predictions = results;
   });
 }
 
-// 모델 로드 완료 시 호출되는 콜백 함수
-function modelReady() {
-  console.log('Handpose 모델이 로드되었습니다!');
+function modelReday() {
+  console.log('Handpose 모델이 로드되었습니닷!');
 }
-
-function init() {}
 
 function draw() {
   background(255);
 
-  // 비디오 픽셀 데이터 로드
-  video.loadPixels();
+  let gridSize = getGridSizeFromHand();
 
-  // 모자이크 효과 적용
-  let gridSize = int(map(mouseX, 0, width, 5, 20)); // 마우스 위치에 따라 그리드 크기 변경
-  for (let x = 0; x < video.width; x += gridSize) {
-    for (let y = 0; y < video.height; y += gridSize) {
-      let index = (y * video.width + x) * 4;
-      let r = video.pixels[index];
-      let g = video.pixels[index + 1];
-      let b = video.pixels[index + 2];
+  for (let y = 0; y < img.height; y += gridSize) {
+    for (let x = 0; x < img.width; x += gridSize) {
+      const c = img.get(x, y);
 
-      fill(r, g, b);
+      fill(c);
       noStroke();
-      rect(x, y, gridSize, gridSize);
+      //좌표매핑은 chatgpt의 도움을 받아 작성되었습니다.
+      rect(
+        map(x, 0, img.width, 0, width),
+        map(y, 0, img.height, 0, height),
+        map(gridSize, 0, img.width, 0, width),
+        map(gridSize, 0, img.height, 0, height)
+      );
     }
   }
 
-  // Handpose 키포인트 그리기
   drawKeypoints();
 }
 
-// 예측된 키포인트를 그리는 함수
+function getGridSizeFromHand() {
+  if (predictions.length > 0) {
+    const landmarks = predictions[0].landmarks;
+    //엄지와 중지의 거리 계산은 chat gpt의 도움을 받아 작성되었습니다.
+    const thumbTip = landmarks[4];
+    const middleTip = landmarks[12];
+    const distance = dist(thumbTip[0], thumbTip[1], middleTip[0], middleTip[1]);
+
+    return constrain(map(distance, 50, 300, 10, 50), 5, 50);
+  }
+  return 20;
+}
+
 function drawKeypoints() {
-  for (let i = 0; i < predictions.length; i++) {
-    let prediction = predictions[i];
-    for (let j = 0; j < prediction.landmarks.length; j++) {
-      let [x, y, z] = prediction.landmarks[j];
-      fill(0, 255, 0);
-      noStroke();
-      ellipse(x, y, 10, 10);
+  for (let n = 0; n < predictions.length; n++) {
+    const prediction = predictions[n];
+    for (let i = 0; i < prediction.landmarks.length; i++) {
+      const [x, y] = prediction.landmarks[i];
+      noFill();
+      ellipse(
+        map(x, 0, img.width, 0, width),
+        map(y, 0, img.height, 0, height),
+        10,
+        10
+      );
     }
   }
 }
 
+function mousePressed() {
+  currentImageIdx = (currentImageIdx + 1) % images.length;
+
+  img = loadImage(images[currentImageIdx]);
+}
+
 function windowResized() {
+  // 컨테이너의 현재 위치, 크기 등의 정보 가져와서 객체구조분해할당을 통해 너비, 높이 정보를 변수로 추출.
   const { width: containerW, height: containerH } =
     container.getBoundingClientRect();
-
+  // 종횡비가 설정되지 않은 경우:
+  // 컨테이너의 크기와 일치하도록 캔버스 크기를 조정.
   if (aspectW === 0 || aspectH === 0) {
     resizeCanvas(containerW, containerH);
-  } else if (containerW / containerH > aspectW / aspectH) {
+  }
+  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 클 경우:
+  // 컨테이너의 세로길이에 맞춰 종횡비대로 캔버스 크기를 조정.
+  else if (containerW / containerH > aspectW / aspectH) {
     resizeCanvas((containerH * aspectW) / aspectH, containerH);
-  } else {
+  }
+  // 컨테이너의 가로 비율이 설정한 종횡비의 가로 비율보다 작거나 같을 경우:
+  // 컨테이너의 가로길이에 맞춰 종횡비대로 캔버스 크기를 조정.
+  else {
     resizeCanvas(containerW, (containerW * aspectH) / aspectW);
   }
+  // 위 과정을 통해 캔버스 크기가 조정된 경우, 다시 처음부터 그려야할 수도 있다.
+  // 이런 경우 setup()의 일부 구문을 init()에 작성해서 여기서 실행하는게 편리하다.
+  // init();
 }
